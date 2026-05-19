@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tune — Music Player</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=Syne+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="app-name">Tune<span>.</span></div>
+    <div class="header-actions">
+      <button class="sidebar-action-btn" onclick="exportPlaylist()" title="Export Playlist Backup (JSON)">📤</button>
+      <button class="sidebar-action-btn" onclick="document.getElementById('import-input').click()" title="Import Playlist Backup (JSON)">📥</button>
+      <button class="add-btn" onclick="document.getElementById('file-input').click()" title="Add songs">+</button>
+    </div>
+  </div>
+  
+  <div class="search-sort-bar">
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Search title, artist, album..." oninput="handleSearch(this.value)">
+    </div>
+    <div class="sort-box">
+      <select id="sort-select" onchange="handleSortField(this.value)">
+        <option value="default">Sort: Default</option>
+        <option value="title">Sort: Title</option>
+        <option value="artist">Sort: Artist</option>
+        <option value="duration">Sort: Duration</option>
+        <option value="date">Sort: Date Added</option>
+      </select>
+      <button class="sort-dir-btn" id="sort-dir-btn" onclick="toggleSortDirection()" title="Sort Ascending/Descending">⇅</button>
+    </div>
+  </div>
+
+  <div class="playlist-label" id="playlist-label">Playlist</div>
+  <div class="playlist" id="playlist">
+    <div class="empty-list" id="empty-msg">
+      <span class="big">♪</span>
+      Click <strong>+</strong> to add songs<br>from your device
+    </div>
+  </div>
+</aside>
+
+<!-- Main Player -->
+<main class="main" id="main">
+  <div class="bg-art" id="bg-art"></div>
+  <canvas class="visualizer" id="visualizer"></canvas>
+  <canvas class="particles" id="particles"></canvas>
+
+  <div class="top-controls">
+    <div class="auto-badge" id="auto-badge" onclick="toggleAutoplay()">
+      <span class="auto-dot"></span>
+      <span id="auto-label">Autoplay off</span>
+    </div>
+    <button class="settings-btn" id="stats-btn" onclick="toggleStatsDashboard()" title="Listening Stats & History">📊</button>
+    <button class="settings-btn" id="lyrics-btn" onclick="toggleLyrics()" title="Lyrics">💬</button>
+    <button class="settings-btn" onclick="toggleSettings()" title="Audio Settings">⚙</button>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast-notification" id="toast-notification">Notification</div>
+
+  <!-- Stats Dashboard Overlay -->
+  <div class="stats-overlay" id="stats-overlay" style="display:none">
+    <div class="stats-modal">
+      <div class="stats-header">
+        <h2>Listening Activity</h2>
+        <button class="close-stats-btn" onclick="toggleStatsDashboard()">✕</button>
+      </div>
+      
+      <div class="stats-grid">
+        <!-- Card 1: Total Time -->
+        <div class="stats-card time-card">
+          <div class="sc-icon">⏱️</div>
+          <div class="sc-info">
+            <h3>Total Listening Time</h3>
+            <p id="stat-total-time">0h 0m 0s</p>
+          </div>
+        </div>
+        
+        <!-- Card 2: Most Played -->
+        <div class="stats-card most-played-card">
+          <h3>Top Tracks</h3>
+          <div class="top-tracks-list" id="stat-top-tracks">
+            <div class="empty-stats">No play data recorded yet. Songs will appear here as you play them!</div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Recently Played Section -->
+      <div class="recent-section">
+        <h3>Recently Played (Last 20)</h3>
+        <div class="recent-list" id="stat-recent-list">
+          <div class="empty-stats">Your playback history is empty. Start listening to populate!</div>
+        </div>
+      </div>
+
+      <div class="stats-footer">
+        <button class="reset-stats-btn" onclick="resetStatsData()">Reset Activity Data</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio Settings Panel -->
+  <div class="audio-settings" id="audio-settings" style="display:none">
+    <h3>Audio Settings</h3>
+    
+    <div class="setting-group">
+      <label>EQ Preset</label>
+      <select id="eq-preset" onchange="setEQPreset(this.value)">
+        <option value="flat">Flat</option>
+        <option value="rock">Rock</option>
+        <option value="pop">Pop</option>
+        <option value="bass">Bass Boost</option>
+        <option value="classical">Classical</option>
+      </select>
+    </div>
+
+    <div class="setting-group-container" style="margin-top: 10px;">
+      <label class="section-label">5-Band EQ</label>
+      <div class="setting-group">
+        <label>60 Hz <span id="eq-val-60">0dB</span></label>
+        <input type="range" id="eq-60" min="-12" max="12" step="1" value="0" oninput="updateEQ()">
+      </div>
+      <div class="setting-group">
+        <label>230 Hz <span id="eq-val-230">0dB</span></label>
+        <input type="range" id="eq-230" min="-12" max="12" step="1" value="0" oninput="updateEQ()">
+      </div>
+      <div class="setting-group">
+        <label>910 Hz <span id="eq-val-910">0dB</span></label>
+        <input type="range" id="eq-910" min="-12" max="12" step="1" value="0" oninput="updateEQ()">
+      </div>
+      <div class="setting-group">
+        <label>4 kHz <span id="eq-val-4000">0dB</span></label>
+        <input type="range" id="eq-4000" min="-12" max="12" step="1" value="0" oninput="updateEQ()">
+      </div>
+      <div class="setting-group">
+        <label>14 kHz <span id="eq-val-14000">0dB</span></label>
+        <input type="range" id="eq-14000" min="-12" max="12" step="1" value="0" oninput="updateEQ()">
+      </div>
+    </div>
+
+    <div class="effects-container" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 12px; margin-bottom: 15px;">
+      <label class="section-label">Audio Effects</label>
+      
+      <div class="setting-group">
+        <label>Reverb Mix <span id="reverb-val">0%</span></label>
+        <input type="range" id="reverb-slider" min="0" max="100" step="5" value="0" oninput="updateReverb(this.value)">
+      </div>
+      
+      <div class="setting-group toggle-group" style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+        <label style="margin: 0; font-size: 12px; color: var(--muted);">Auto-Normalize Volume</label>
+        <label class="switch">
+          <input type="checkbox" id="norm-toggle" onchange="toggleNormalization(this.checked)">
+          <span class="slider round"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="setting-group" style="margin-top: 15px;">
+      <label>Crossfade <span id="cf-val">3s</span></label>
+      <input type="range" id="crossfade-slider" min="0" max="10" step="1" value="3" oninput="updateCrossfade()">
+    </div>
+
+    <div class="setting-group">
+      <label>Speed <span id="speed-val">1.0x</span></label>
+      <input type="range" id="speed-slider" min="0.5" max="2.0" step="0.1" value="1.0" oninput="updateSpeed(this.value)">
+    </div>
+
+    <div class="setting-group">
+      <label>Transition Mode</label>
+      <select id="transition-mode" onchange="setTransitionMode(this.value)">
+        <option value="crossfade">Crossfade</option>
+        <option value="gapless">True Gapless</option>
+      </select>
+    </div>
+
+    <div class="setting-group">
+      <label>Sleep Timer <span id="sleep-timer-val">Off</span></label>
+      <select id="sleep-timer" onchange="setSleepTimer(this.value)">
+        <option value="0">Off</option>
+        <option value="5">5 Minutes</option>
+        <option value="15">15 Minutes</option>
+        <option value="30">30 Minutes</option>
+        <option value="60">60 Minutes</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Empty state -->
+  <div class="no-song" id="no-song">
+    <span class="big-note">♫</span>
+    <h2>No song selected</h2>
+    <p>Add songs using the + button<br>and pick a track to start listening.</p>
+  </div>
+
+  <!-- Player card (hidden until song loaded) -->
+  <div class="player-card" id="player-card" style="display:none">
+    <div class="art-wrap" id="art-wrap">
+      <div class="vinyl-inner">
+        <img id="art-img" src="" alt="">
+        <span class="art-placeholder" id="art-placeholder">♪</span>
+      </div>
+      <div class="vinyl-hole"></div>
+    </div>
+
+    <div class="song-info">
+      <div class="song-title" id="song-title">—</div>
+      <div class="song-artist" id="song-artist">Unknown Artist</div>
+    </div>
+
+    <!-- Lyrics Panel (hidden by default) -->
+    <div class="lyrics-panel" id="lyrics-panel" style="display:none">
+      <div class="lyrics-content" id="lyrics-content">
+        <p class="lyric-line muted">Drop a .lrc file</p>
+        <p class="lyric-line active">To see synced lyrics here</p>
+      </div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-times">
+        <span id="cur-time">0:00</span>
+        <span id="dur-time">0:00</span>
+      </div>
+      <div class="progress-bar" id="progress-bar">
+        <canvas id="waveform-canvas"></canvas>
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <div class="ab-loop-row">
+        <button class="ab-loop-btn" id="ab-btn-a" onclick="setLoopA()">[A] Start</button>
+        <button class="ab-loop-btn" id="ab-btn-b" onclick="setLoopB()">[B] End</button>
+        <span class="ab-loop-status" id="ab-loop-status">Loop: Off</span>
+        <button class="ab-loop-btn clear" onclick="clearLoop()" title="Clear Loop">✕</button>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="ctrl-btn" id="shuffle-btn" onclick="toggleShuffle()" title="Shuffle">⇄</button>
+      <button class="ctrl-btn skip" onclick="prevTrack()" title="Previous">⏮</button>
+      <button class="play-btn" id="play-btn" onclick="togglePlay()">▶</button>
+      <button class="ctrl-btn skip" onclick="nextTrack()" title="Next">⏭</button>
+      <button class="ctrl-btn" id="repeat-btn" onclick="toggleRepeat()" title="Repeat">↻</button>
+    </div>
+
+    <div class="volume-row">
+      <span class="vol-icon" id="vol-icon" onclick="toggleMute()">🔉</span>
+      <input class="vol-slider" type="range" id="vol-slider" min="0" max="100" value="80" oninput="setVolume(this.value)">
+      <span class="vol-pct" id="vol-pct">80%</span>
+    </div>
+  </div>
+
+  <!-- Mini Player -->
+  <div class="mini-player" id="mini-player">
+    <img class="mini-art" id="mini-art-img" src="">
+    <div class="mini-info">
+      <div class="mini-title" id="mini-title">—</div>
+      <div class="mini-artist" id="mini-artist">Unknown</div>
+    </div>
+    <div class="mini-controls">
+      <button onclick="prevTrack()">⏮</button>
+      <button id="mini-play-btn" onclick="togglePlay()">▶</button>
+      <button onclick="nextTrack()">⏭</button>
+    </div>
+    <div class="mini-progress"><div class="mini-progress-fill" id="mini-progress-fill"></div></div>
+  </div>
+</main>
+
+<input type="file" id="file-input" multiple accept="audio/*,.lrc" onchange="addFiles(this.files)">
+<input type="file" id="import-input" accept=".json" style="display:none" onchange="importPlaylist(this.files)">
+
+<!-- Drag & Drop Zone Overlay -->
+<div class="drag-drop-zone" id="drag-drop-zone">
+  <div class="drag-drop-content">
+    <div class="drag-drop-circle">
+      <span class="drag-drop-icon">🎵</span>
+    </div>
+    <h2>Drop your files here</h2>
+    <p>Add audio files (.mp3, .wav, .m4a) or synced lyrics (.lrc) instantly</p>
+  </div>
+</div>
+
+<!-- Shortcuts Help Overlay -->
+<div class="shortcuts-overlay" id="shortcuts-overlay" style="display:none" onclick="handleShortcutsOverlayClick(event)">
+  <div class="shortcuts-card">
+    <button class="shortcuts-close" onclick="toggleShortcutsOverlay()">✕</button>
+    <div class="shortcuts-header">
+      <span class="shortcuts-icon">⌨</span>
+      <h2>Keyboard Shortcuts</h2>
+    </div>
+    <div class="shortcuts-grid">
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>Space</kbd></span>
+        <span class="shortcut-desc">Play / Pause</span>
+      </div>
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>⇄</kbd> or <kbd>→</kbd></span>
+        <span class="shortcut-desc">Seek +5 Seconds</span>
+      </div>
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>⇄</kbd> or <kbd>←</kbd></span>
+        <span class="shortcut-desc">Seek -5 Seconds</span>
+      </div>
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>↑</kbd></span>
+        <span class="shortcut-desc">Volume +5%</span>
+      </div>
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>↓</kbd></span>
+        <span class="shortcut-desc">Volume -5%</span>
+      </div>
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>N</kbd></span>
+        <span class="shortcut-desc">Next Track</span>
+      </div>
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>P</kbd></span>
+        <span class="shortcut-desc">Previous Track</span>
+      </div>
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>M</kbd></span>
+        <span class="shortcut-desc">Mute / Unmute</span>
+      </div>
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>?</kbd></span>
+        <span class="shortcut-desc">Show Shortcuts Help</span>
+      </div>
+      <div class="shortcut-item">
+        <span class="shortcut-key"><kbd>Esc</kbd></span>
+        <span class="shortcut-desc">Close Active Panel</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/color-thief/2.3.0/color-thief.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
