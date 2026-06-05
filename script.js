@@ -34,7 +34,19 @@ let activeTab = 'library';
 let jiosaavnTracks = [];
 let jiosaavnSearchQuery = '';
 let jiosaavnSearchTimeout = null;
-let jiosaavnApiUrl = localStorage.getItem('jiosaavn_api_url') || 'https://tune-music-player-i7ck.vercel.app';
+
+let storedApiUrl = localStorage.getItem('jiosaavn_api_url');
+if (storedApiUrl) {
+  storedApiUrl = storedApiUrl.trim();
+  if (storedApiUrl.endsWith('/')) {
+    storedApiUrl = storedApiUrl.slice(0, -1);
+  }
+}
+if (!storedApiUrl || storedApiUrl === 'http://127.0.0.1:5100' || storedApiUrl === 'http://localhost:5100') {
+  storedApiUrl = 'https://tune-music-player-i7ck.vercel.app';
+  localStorage.setItem('jiosaavn_api_url', storedApiUrl);
+}
+let jiosaavnApiUrl = storedApiUrl;
 
 function saveApiUrl(val) {
   let cleaned = val.trim();
