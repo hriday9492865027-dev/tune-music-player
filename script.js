@@ -1579,7 +1579,9 @@ async function performJioSaavnSearch(query) {
     pl.innerHTML = `
       <div class="empty-list">
         <span class="big">⚠️</span>
-        <br>Failed to search JioSaavn.<br>Make sure the API URL is correct and online.
+        <br>Failed to search JioSaavn.
+        <br><small style="color: var(--text-dim); opacity: 0.8; font-size: 11px;">Error: ${error.message || error}</small>
+        <br><br>Make sure the API URL is correct and online.
       </div>
     `;
   }
