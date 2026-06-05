@@ -11,6 +11,32 @@ def search_for_song(query, lyrics, songdata):
         id = get_song_id(query)
         return get_song(id, lyrics)
 
+    try:
+        # 1. Try to search using search.getResults to get more songs (e.g. 40) in a single request
+        search_url = "https://www.jiosaavn.com/api.php?__call=search.getResults&_format=json&_marker=0&cc=in&includeMetaTags=1&n=40&q=" + query
+        response = requests.get(search_url).text.encode().decode('unicode-escape')
+        pattern = r'\(From "([^"]+)"\)'
+        cleaned_response = re.sub(pattern, r"(From '\1')", response)
+        data = json.loads(cleaned_response)
+        
+        if data and 'results' in data:
+            results = data['results']
+            if not songdata:
+                return results
+            songs = []
+            for song in results:
+                try:
+                    song_data = helper.format_song(song, lyrics)
+                    if song_data:
+                        songs.append(song_data)
+                except Exception as e:
+                    print(f"Error formatting song from search results: {e}")
+            if songs:
+                return songs
+    except Exception as e:
+        print(f"search.getResults failed, falling back to autocomplete: {e}")
+
+    # 2. Fallback to autocomplete (returns 5 results)
     search_base_url = endpoints.search_base_url+query
     response = requests.get(search_base_url).text.encode().decode('unicode-escape')
     pattern = r'\(From "([^"]+)"\)'

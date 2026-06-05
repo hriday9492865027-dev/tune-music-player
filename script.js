@@ -945,8 +945,17 @@ function updateUI(i) {
     document.documentElement.style.setProperty('--bg', '#121215');
   }
   refreshPlaylistView();
-  if (t.lyrics && document.getElementById('lyrics-panel').style.display !== 'none') {
-    renderLyrics(t.lyrics, -1);
+  if (document.getElementById('lyrics-panel').style.display !== 'none') {
+    if (t.jiosaavnId && (!t.lyrics || (Array.isArray(t.lyrics) && t.lyrics.length === 0) || (typeof t.lyrics === 'string' && t.lyrics.trim().length === 0))) {
+      const lContent = document.getElementById('lyrics-content');
+      if (lContent) lContent.innerHTML = '<div style="text-align:center; opacity:0.6; padding: 20px;">Loading lyrics...</div>';
+      fetchLyricsOnDemand(t);
+    } else if (t.lyrics) {
+      renderLyrics(t.lyrics, -1);
+    } else {
+      const lContent = document.getElementById('lyrics-content');
+      if (lContent) lContent.innerHTML = '<div style="text-align:center; opacity:0.6; padding: 20px;">No lyrics available</div>';
+    }
   }
 
   if ('mediaSession' in navigator) {
@@ -1277,6 +1286,42 @@ function fmtTime(s) {
 
 // ── Lyrics Handlers ──
 let currentLyricIdx = -1;
+
+async function fetchLyricsOnDemand(track) {
+  if (!track || !track.jiosaavnId) return;
+  if (track.lyrics && (Array.isArray(track.lyrics) ? track.lyrics.length > 0 : track.lyrics.trim().length > 0)) {
+    return;
+  }
+  
+  try {
+    const response = await fetch(`${jiosaavnApiUrl}/lyrics/?query=${track.jiosaavnId}`);
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.status && data.lyrics) {
+        track.lyrics = data.lyrics;
+        saveTracksToDB();
+        
+        if (currentIdx >= 0 && tracks[currentIdx].jiosaavnId === track.jiosaavnId) {
+          if (document.getElementById('lyrics-panel').style.display !== 'none') {
+            renderLyrics(track.lyrics, -1);
+          }
+        }
+      } else {
+        if (currentIdx >= 0 && tracks[currentIdx].jiosaavnId === track.jiosaavnId) {
+          const lContent = document.getElementById('lyrics-content');
+          if (lContent) lContent.innerHTML = '<div style="text-align:center; opacity:0.6; padding: 20px;">No lyrics available</div>';
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to fetch lyrics on demand:", err);
+    if (currentIdx >= 0 && tracks[currentIdx].jiosaavnId === track.jiosaavnId) {
+      const lContent = document.getElementById('lyrics-content');
+      if (lContent) lContent.innerHTML = '<div style="text-align:center; opacity:0.6; padding: 20px;">No lyrics available</div>';
+    }
+  }
+}
+
 function syncLyrics(time, lyrics) {
   let idx = lyrics.findIndex(l => l.time > time) - 1;
   if (idx === -2) idx = lyrics.length - 1;
@@ -1333,8 +1378,18 @@ function toggleLyrics() {
   const panel = document.getElementById('lyrics-panel');
   if (panel.style.display === 'none') {
     panel.style.display = 'block';
-    if (currentIdx >= 0 && tracks[currentIdx].lyrics) {
-      renderLyrics(tracks[currentIdx].lyrics, currentLyricIdx);
+    if (currentIdx >= 0) {
+      const t = tracks[currentIdx];
+      if (t.jiosaavnId && (!t.lyrics || (Array.isArray(t.lyrics) && t.lyrics.length === 0) || (typeof t.lyrics === 'string' && t.lyrics.trim().length === 0))) {
+        const lContent = document.getElementById('lyrics-content');
+        if (lContent) lContent.innerHTML = '<div style="text-align:center; opacity:0.6; padding: 20px;">Loading lyrics...</div>';
+        fetchLyricsOnDemand(t);
+      } else if (t.lyrics) {
+        renderLyrics(t.lyrics, currentLyricIdx);
+      } else {
+        const lContent = document.getElementById('lyrics-content');
+        if (lContent) lContent.innerHTML = '<div style="text-align:center; opacity:0.6; padding: 20px;">No lyrics available</div>';
+      }
     }
   } else {
     panel.style.display = 'none';
@@ -1556,7 +1611,7 @@ async function performJioSaavnSearch(query) {
   `;
   
   try {
-    const response = await fetch(`${jiosaavnApiUrl}/result/?query=${encodeURIComponent(query)}&lyrics=true`);
+    const response = await fetch(`${jiosaavnApiUrl}/result/?query=${encodeURIComponent(query)}&lyrics=false`);
     if (!response.ok) throw new Error("JioSaavn API error");
     
     const data = await response.json();
