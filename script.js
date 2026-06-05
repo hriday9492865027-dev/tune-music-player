@@ -34,14 +34,14 @@ let activeTab = 'library';
 let jiosaavnTracks = [];
 let jiosaavnSearchQuery = '';
 let jiosaavnSearchTimeout = null;
-let jiosaavnApiUrl = localStorage.getItem('jiosaavn_api_url') || 'http://127.0.0.1:5100';
+let jiosaavnApiUrl = localStorage.getItem('jiosaavn_api_url') || 'https://tune-music-player-i7ck.vercel.app';
 
 function saveApiUrl(val) {
   let cleaned = val.trim();
   if (cleaned.endsWith('/')) {
     cleaned = cleaned.slice(0, -1);
   }
-  jiosaavnApiUrl = cleaned || 'http://127.0.0.1:5100';
+  jiosaavnApiUrl = cleaned || 'https://tune-music-player-i7ck.vercel.app';
   localStorage.setItem('jiosaavn_api_url', jiosaavnApiUrl);
 }
 
