@@ -29,6 +29,22 @@ let sortField = 'default';
 let sortDirection = 'asc';
 let playQueue = [];
 
+// ── JioSaavn API Integration ──
+let activeTab = 'library';
+let jiosaavnTracks = [];
+let jiosaavnSearchQuery = '';
+let jiosaavnSearchTimeout = null;
+let jiosaavnApiUrl = localStorage.getItem('jiosaavn_api_url') || 'http://127.0.0.1:5100';
+
+function saveApiUrl(val) {
+  let cleaned = val.trim();
+  if (cleaned.endsWith('/')) {
+    cleaned = cleaned.slice(0, -1);
+  }
+  jiosaavnApiUrl = cleaned || 'http://127.0.0.1:5100';
+  localStorage.setItem('jiosaavn_api_url', jiosaavnApiUrl);
+}
+
 // ── Listening Stats & History ──
 let stats = {
   totalListeningTime: 0,
@@ -461,7 +477,8 @@ function saveTracksToDB() {
       picUrl: t.picUrl, 
       duration: t.duration, 
       lyrics: t.lyrics, 
-      dateAdded: t.dateAdded || Date.now() 
+      dateAdded: t.dateAdded || Date.now(),
+      jiosaavnId: t.jiosaavnId || null
     });
   });
 }
@@ -485,7 +502,8 @@ function loadTracksFromDB() {
           file: s.file || null,
           duration: s.duration || 0,
           lyrics: s.lyrics || [],
-          dateAdded: s.dateAdded || Date.now()
+          dateAdded: s.dateAdded || Date.now(),
+          jiosaavnId: s.jiosaavnId || null
         };
       });
       renderPlaylist();
@@ -901,8 +919,7 @@ function updateUI(i) {
     document.documentElement.style.setProperty('--accent', '#e8c547');
     document.documentElement.style.setProperty('--bg', '#121215');
   }
-
-  renderPlaylist();
+  refreshPlaylistView();
   if (t.lyrics && document.getElementById('lyrics-panel').style.display !== 'none') {
     renderLyrics(t.lyrics, -1);
   }
@@ -934,7 +951,7 @@ function startCrossfadeChecker() {
           } else {
             playTrackDirect(nextTrackObj);
           }
-          renderPlaylist();
+          refreshPlaylistView();
           return;
         }
 
@@ -994,7 +1011,7 @@ function nextTrack() {
     } else {
       playTrackDirect(nextTrackObj);
     }
-    renderPlaylist();
+    refreshPlaylistView();
     return;
   }
 
@@ -1062,9 +1079,13 @@ function bindAudioEvents(aud) {
       updateTrackItem(currentIdx);
       saveTracksToDB();
     }
-    
-    if (currentIdx >= 0 && tracks[currentIdx].lyrics && tracks[currentIdx].lyrics.length > 0) {
-      syncLyrics(aud.currentTime, tracks[currentIdx].lyrics);
+     
+    if (currentIdx >= 0 && tracks[currentIdx].lyrics) {
+      const ly = tracks[currentIdx].lyrics;
+      const isSynced = Array.isArray(ly) && ly.length > 0 && typeof ly[0] === 'object' && 'time' in ly[0];
+      if (isSynced) {
+        syncLyrics(aud.currentTime, ly);
+      }
     }
   });
 
@@ -1075,7 +1096,7 @@ function bindAudioEvents(aud) {
     if (repeatMode === 1) { playTrack(currentIdx, false); return; }
     if (repeatMode === 2 || autoplay) { nextTrack(); return; }
     if (currentIdx < tracks.length - 1) { nextTrack(); return; }
-    else { renderPlaylist(); }
+    else { refreshPlaylistView(); }
   });
 }
 
@@ -1244,23 +1265,52 @@ function renderLyrics(lyrics, activeIdx) {
   const panel = document.getElementById('lyrics-content');
   if (!panel) return;
   panel.innerHTML = '';
-  lyrics.forEach((l, i) => {
-    const p = document.createElement('p');
-    p.className = 'lyric-line' + (i === activeIdx ? ' active' : ' muted');
-    p.textContent = l.text;
-    p.onclick = () => { if (activeAudio) activeAudio.currentTime = l.time; };
-    panel.appendChild(p);
-    if (i === activeIdx) {
-      p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  
+  if (typeof lyrics === 'string') {
+    const lines = lyrics.split('\n');
+    lines.forEach(line => {
+      const p = document.createElement('p');
+      p.className = 'lyric-line static';
+      p.style.cursor = 'default';
+      p.textContent = line || ' ';
+      panel.appendChild(p);
+    });
+    return;
+  }
+  
+  if (Array.isArray(lyrics)) {
+    const isSynced = lyrics.length > 0 && typeof lyrics[0] === 'object' && 'time' in lyrics[0];
+    if (!isSynced) {
+      lyrics.forEach(line => {
+        const p = document.createElement('p');
+        p.className = 'lyric-line static';
+        p.style.cursor = 'default';
+        p.textContent = typeof line === 'string' ? line : JSON.stringify(line);
+        panel.appendChild(p);
+      });
+      return;
     }
-  });
+    
+    lyrics.forEach((l, i) => {
+      const p = document.createElement('p');
+      p.className = 'lyric-line' + (i === activeIdx ? ' active' : ' muted');
+      p.textContent = l.text;
+      p.onclick = () => { if (activeAudio) activeAudio.currentTime = l.time; };
+      panel.appendChild(p);
+      if (i === activeIdx) {
+        p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    });
+  }
 }
 
 function toggleLyrics() {
   const panel = document.getElementById('lyrics-panel');
   if (panel.style.display === 'none') {
     panel.style.display = 'block';
-    if (currentIdx >= 0 && tracks[currentIdx].lyrics) renderLyrics(tracks[currentIdx].lyrics, currentLyricIdx);
+    if (currentIdx >= 0 && tracks[currentIdx].lyrics) {
+      renderLyrics(tracks[currentIdx].lyrics, currentLyricIdx);
+    }
   } else {
     panel.style.display = 'none';
   }
@@ -1406,8 +1456,204 @@ function triggerSleepTimerEnd() {
 
 // ── Search & Filter Helpers ──
 function handleSearch(val) {
-  searchQuery = val.trim();
-  renderPlaylist();
+  const query = val.trim();
+  if (activeTab === 'library') {
+    searchQuery = query;
+    renderPlaylist();
+  } else {
+    jiosaavnSearchQuery = query;
+    if (jiosaavnSearchTimeout) clearTimeout(jiosaavnSearchTimeout);
+    jiosaavnSearchTimeout = setTimeout(() => {
+      performJioSaavnSearch(query);
+    }, 400);
+  }
+}
+
+function switchTab(tab) {
+  activeTab = tab;
+  document.getElementById('tab-library').classList.toggle('active', tab === 'library');
+  document.getElementById('tab-jiosaavn').classList.toggle('active', tab === 'jiosaavn');
+  
+  const sidebar = document.querySelector('.sidebar');
+  sidebar.classList.toggle('jiosaavn-active', tab === 'jiosaavn');
+  
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.value = '';
+    searchQuery = '';
+    jiosaavnSearchQuery = '';
+    searchInput.placeholder = tab === 'library' ? 'Search title, artist, album...' : 'Search JioSaavn online...';
+  }
+  
+  if (tab === 'library') {
+    renderPlaylist();
+  } else {
+    jiosaavnTracks = [];
+    renderJioSaavnPlaylist();
+  }
+}
+
+function refreshPlaylistView() {
+  if (activeTab === 'library') {
+    renderPlaylist();
+  } else {
+    renderJioSaavnPlaylist();
+  }
+}
+
+async function performJioSaavnSearch(query) {
+  if (!query) {
+    jiosaavnTracks = [];
+    renderJioSaavnPlaylist();
+    return;
+  }
+  
+  const pl = document.getElementById('playlist');
+  pl.innerHTML = `
+    <div class="empty-list">
+      <span class="big spinner">⏳</span>
+      <br>Searching JioSaavn...
+    </div>
+  `;
+  
+  try {
+    const response = await fetch(`${jiosaavnApiUrl}/result/?query=${encodeURIComponent(query)}&lyrics=true`);
+    if (!response.ok) throw new Error("JioSaavn API error");
+    
+    const data = await response.json();
+    let results = [];
+    
+    if (Array.isArray(data)) {
+      results = data;
+    } else if (data && typeof data === 'object') {
+      if (data.songs && Array.isArray(data.songs)) {
+        results = data.songs;
+      } else if (data.media_url || data.encrypted_media_url) {
+        results = [data];
+      }
+    }
+    
+    jiosaavnTracks = results.map(item => ({
+      url: item.media_url,
+      name: item.song,
+      title: item.song,
+      artist: item.singers || 'Unknown Artist',
+      album: item.album || 'JioSaavn',
+      picUrl: item.image || null,
+      file: null,
+      duration: parseInt(item.duration) || 0,
+      lyrics: item.lyrics || null,
+      dateAdded: Date.now(),
+      jiosaavnId: item.id
+    }));
+    
+    renderJioSaavnPlaylist();
+  } catch (error) {
+    console.error("JioSaavn search failed:", error);
+    pl.innerHTML = `
+      <div class="empty-list">
+        <span class="big">⚠️</span>
+        <br>Failed to search JioSaavn.<br>Make sure the API URL is correct and online.
+      </div>
+    `;
+  }
+}
+
+function renderJioSaavnPlaylist() {
+  const pl = document.getElementById('playlist');
+  const emptyMsg = document.getElementById('empty-msg');
+  
+  pl.innerHTML = '';
+  emptyMsg.style.display = 'none';
+  
+  if (!jiosaavnSearchQuery) {
+    const promptMsg = document.createElement('div');
+    promptMsg.className = 'empty-list';
+    promptMsg.innerHTML = `<span class="big">🔍</span>Search millions of songs<br>directly from JioSaavn`;
+    pl.appendChild(promptMsg);
+    return;
+  }
+  
+  if (jiosaavnTracks.length === 0) {
+    const noResults = document.createElement('div');
+    noResults.className = 'empty-list';
+    noResults.innerHTML = `<span class="big">❔</span>No online results found for "${jiosaavnSearchQuery}"`;
+    pl.appendChild(noResults);
+    return;
+  }
+  
+  jiosaavnTracks.forEach((t, i) => {
+    const item = document.createElement('div');
+    item.className = 'track-item jiosaavn-item';
+    
+    const isPlayingThis = (currentIdx >= 0 && tracks[currentIdx] && tracks[currentIdx].jiosaavnId === t.jiosaavnId);
+    if (isPlayingThis) {
+      item.classList.add('active');
+    }
+    
+    item.innerHTML = `
+      <div class="playing-anim ${activeAudio.paused ? 'paused' : ''}">
+        <div class="bar-anim" style="height:6px"></div>
+        <div class="bar-anim" style="height:10px"></div>
+        <div class="bar-anim" style="height:4px"></div>
+      </div>
+      <div class="ti-num">${i + 1}</div>
+      <div class="ti-art">
+        ${t.picUrl ? `<img src="${t.picUrl}">` : '🎵'}
+      </div>
+      <div class="ti-info">
+        <div class="ti-name">${t.title}</div>
+        <div class="ti-artist">${t.artist}</div>
+      </div>
+      <div class="ti-dur">${t.duration ? fmtTime(t.duration) : '—'}</div>
+      <div class="ti-actions" style="opacity: 1; width: 30px;">
+        <button class="ti-action-btn" onclick="addJioSaavnToLibrary(event, ${i})" title="Add to Library">➕</button>
+      </div>
+    `;
+    
+    item.style.paddingRight = '16px';
+    
+    item.addEventListener('click', (e) => {
+      if (!e.target.closest('.ti-action-btn')) {
+        playJioSaavnTrack(i);
+      }
+    });
+    
+    pl.appendChild(item);
+  });
+}
+
+function playJioSaavnTrack(i) {
+  const t = jiosaavnTracks[i];
+  
+  let existingIdx = tracks.findIndex(item => item.jiosaavnId === t.jiosaavnId || (item.title === t.title && item.artist === t.artist));
+  if (existingIdx === -1) {
+    tracks.push(t);
+    saveTracksToDB();
+    existingIdx = tracks.length - 1;
+  }
+  
+  playTrack(existingIdx, true);
+  renderJioSaavnPlaylist();
+}
+
+function addJioSaavnToLibrary(e, i) {
+  if (e) { e.preventDefault(); e.stopPropagation(); }
+  const t = jiosaavnTracks[i];
+  
+  const existingIdx = tracks.findIndex(item => item.jiosaavnId === t.jiosaavnId || (item.title === t.title && item.artist === t.artist));
+  if (existingIdx !== -1) {
+    showNotification(`"${t.title}" is already in Library`);
+    return;
+  }
+  
+  tracks.push(t);
+  saveTracksToDB();
+  showNotification(`Added "${t.title}" to Library`);
+  
+  if (activeTab === 'library') {
+    renderPlaylist();
+  }
 }
 
 function handleSortField(val) {
@@ -1430,7 +1676,7 @@ function addToQueue(e, idx) {
   if (idx < 0 || idx >= tracks.length) return;
   const t = tracks[idx];
   playQueue.push(t);
-  renderPlaylist();
+  refreshPlaylistView();
   showNotification(`"${t.title}" added to queue`);
 }
 
@@ -1439,7 +1685,7 @@ function playNext(e, idx) {
   if (idx < 0 || idx >= tracks.length) return;
   const t = tracks[idx];
   playQueue.unshift(t);
-  renderPlaylist();
+  refreshPlaylistView();
   showNotification(`"${t.title}" will play next`);
 }
 
@@ -1447,14 +1693,14 @@ function removeFromQueue(e, qIdx) {
   if (e) { e.preventDefault(); e.stopPropagation(); }
   if (qIdx < 0 || qIdx >= playQueue.length) return;
   const removed = playQueue.splice(qIdx, 1)[0];
-  renderPlaylist();
+  refreshPlaylistView();
   showNotification(`Removed "${removed.title}" from queue`);
 }
 
 function clearQueue(e) {
   if (e) { e.preventDefault(); e.stopPropagation(); }
   playQueue = [];
-  renderPlaylist();
+  refreshPlaylistView();
   showNotification("Queue cleared");
 }
 
@@ -1509,6 +1755,10 @@ initDB().then(() => {
   loadStatsAndRecent();
   startListeningTracker();
   loadTracksFromDB();
+  const apiInput = document.getElementById('api-url-input');
+  if (apiInput) {
+    apiInput.value = jiosaavnApiUrl;
+  }
 }).catch(e => console.error("IndexedDB error:", e));
 
 // ── Listening Stats & History Helper Actions ──

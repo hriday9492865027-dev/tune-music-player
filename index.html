@@ -37,7 +37,10 @@
     </div>
   </div>
 
-  <div class="playlist-label" id="playlist-label">Playlist</div>
+  <div class="playlist-tabs">
+    <button class="playlist-tab active" id="tab-library" onclick="switchTab('library')">Library</button>
+    <button class="playlist-tab" id="tab-jiosaavn" onclick="switchTab('jiosaavn')">JioSaavn</button>
+  </div>
   <div class="playlist" id="playlist">
     <div class="empty-list" id="empty-msg">
       <span class="big">♪</span>
@@ -189,6 +192,13 @@
         <option value="30">30 Minutes</option>
         <option value="60">60 Minutes</option>
       </select>
+    </div>
+    <div class="effects-container" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 12px; margin-bottom: 15px;">
+      <label class="section-label">JioSaavn API</label>
+      <div class="setting-group">
+        <label>API Server URL</label>
+        <input type="text" id="api-url-input" value="http://127.0.0.1:5100" oninput="saveApiUrl(this.value)" placeholder="e.g. https://my-api.vercel.app" style="width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px; border-radius: 6px; outline: none; font-size: 12px;">
+      </div>
     </div>
   </div>
 
