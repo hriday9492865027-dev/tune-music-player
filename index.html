@@ -41,6 +41,9 @@
     <button class="playlist-tab active" id="tab-library" onclick="switchTab('library')">Library</button>
     <button class="playlist-tab" id="tab-jiosaavn" onclick="switchTab('jiosaavn')">JioSaavn</button>
   </div>
+  <div id="jiosaavn-quick-bar" style="display:none; padding: 4px 16px 12px; border-bottom: 1px solid var(--border); background: rgba(26,26,29,0.4);">
+    <button class="ab-loop-btn active" onclick="fetchAllSaavnSongs()" style="font-size: 11px; padding: 6px 12px; width: 100%; border-radius: 6px; border: 1px solid var(--accent); background: rgba(232, 197, 71, 0.1); color: var(--accent); font-weight: 600; cursor: pointer; transition: all 0.2s;">✨ All Songs (Top Hits)</button>
+  </div>
   <div class="playlist" id="playlist">
     <div class="empty-list" id="empty-msg">
       <span class="big">♪</span>

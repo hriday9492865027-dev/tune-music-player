@@ -1477,6 +1477,11 @@ function switchTab(tab) {
   const sidebar = document.querySelector('.sidebar');
   sidebar.classList.toggle('jiosaavn-active', tab === 'jiosaavn');
   
+  const quickBar = document.getElementById('jiosaavn-quick-bar');
+  if (quickBar) {
+    quickBar.style.display = tab === 'jiosaavn' ? 'block' : 'none';
+  }
+  
   const searchInput = document.getElementById('search-input');
   if (searchInput) {
     searchInput.value = '';
@@ -1491,6 +1496,15 @@ function switchTab(tab) {
     jiosaavnTracks = [];
     renderJioSaavnPlaylist();
   }
+}
+
+function fetchAllSaavnSongs() {
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.value = 'Trending';
+  }
+  jiosaavnSearchQuery = 'Trending';
+  performJioSaavnSearch('Trending');
 }
 
 function refreshPlaylistView() {
