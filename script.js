@@ -28,6 +28,7 @@ let searchQuery = '';
 let sortField = 'default';
 let sortDirection = 'asc';
 let playQueue = [];
+let emptyMsgEl = null;
 
 // ── JioSaavn API Integration ──
 let activeTab = 'library';
@@ -671,15 +672,27 @@ function dragEnd(e) {
 // ── Playlist render ──
 function renderPlaylist() {
   const pl = document.getElementById('playlist');
-  const emptyMsg = document.getElementById('empty-msg');
+  let emptyMsg = document.getElementById('empty-msg');
+  if (emptyMsg) {
+    emptyMsgEl = emptyMsg;
+  } else {
+    emptyMsg = emptyMsgEl;
+  }
+  
   if (!tracks.length) { 
-    emptyMsg.style.display = 'block'; 
-    pl.innerHTML = '';
-    pl.appendChild(emptyMsg);
+    if (emptyMsg) {
+      emptyMsg.style.display = 'block'; 
+      pl.innerHTML = '';
+      pl.appendChild(emptyMsg);
+    } else {
+      pl.innerHTML = '';
+    }
     document.getElementById('playlist-label').textContent = 'Playlist';
     return; 
   }
-  emptyMsg.style.display = 'none';
+  if (emptyMsg) {
+    emptyMsg.style.display = 'none';
+  }
   pl.innerHTML = '';
 
   // ── Render Up Next / Play Queue Section ──
@@ -1589,10 +1602,17 @@ async function performJioSaavnSearch(query) {
 
 function renderJioSaavnPlaylist() {
   const pl = document.getElementById('playlist');
-  const emptyMsg = document.getElementById('empty-msg');
+  let emptyMsg = document.getElementById('empty-msg');
+  if (emptyMsg) {
+    emptyMsgEl = emptyMsg;
+  } else {
+    emptyMsg = emptyMsgEl;
+  }
   
   pl.innerHTML = '';
-  emptyMsg.style.display = 'none';
+  if (emptyMsg) {
+    emptyMsg.style.display = 'none';
+  }
   
   if (!jiosaavnSearchQuery) {
     const promptMsg = document.createElement('div');
